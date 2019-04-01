@@ -34,8 +34,34 @@
     (run-message-loop! background-port)
     (do-page-analysis! background-port)))
 
+; -- generate selector ------------------------------------------------------------------------------------------------------
+
+(def state (atom {:prev-element nil :prev-element-background nil}))
+
+(defn update-prev-el [el]
+  (swap! state assoc :prev-element el)
+  (swap! state assoc :prev-element-background (.. el -style -border)))
+
+(defn return-prev-state []
+  (let [prev-element (:prev-element @state)
+        prev-element-border (:prev-element-border @state)]
+    (set! (.. prev-element -style -border) prev-element-border)))
+
+(defn handle-mouse-over [e]
+  "on mouse over add border to the element"
+  (let [target (. e -target)]
+    (do
+     (when (:prev-element @state)
+       (return-prev-state))
+     (update-prev-el target)
+     (set! (.. target -style -border) "1px solid"))))
+
+(defn generate-selector []
+  (.addEventListener js/document "mouseover" handle-mouse-over))
+
 ; -- main entry point -------------------------------------------------------------------------------------------------------
 
 (defn init! []
   (log "CONTENT SCRIPT: init")
+  (generate-selector)
   (connect-to-background-page!))
