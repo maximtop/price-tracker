@@ -3,7 +3,20 @@
   (:require [cljs.core.async :refer [<!]]
             [chromex.logging :refer-macros [log info warn error group group-end]]
             [chromex.protocols.chrome-port :refer [post-message!]]
-            [chromex.ext.runtime :as runtime :refer-macros [connect]]))
+            [chromex.ext.runtime :as runtime :refer-macros [connect]])
+  (:import [goog.async Throttle Debouncer]))
+; -- helper functions -------------------------------------------------------------------------------------------------------
+
+(defn disposable->function [disposable listener interval]
+  (let [disposable-instance (disposable. listener interval)]
+    (fn [& args]
+      (.apply (.-fire disposable-instance) disposable-instance (to-array args)))))
+
+(defn throttle [listener interval]
+  (disposable->function Throttle listener interval))
+
+(defn debounce [listener interval]
+  (disposable->function Debouncer listener interval))
 
 ; -- a message loop ---------------------------------------------------------------------------------------------------------
 
@@ -13,10 +26,10 @@
 (defn run-message-loop! [message-channel]
   (log "CONTENT SCRIPT: starting message loop...")
   (go-loop []
-    (when-some [message (<! message-channel)]
-      (process-message! message)
-      (recur))
-    (log "CONTENT SCRIPT: leaving message loop")))
+           (when-some [message (<! message-channel)]
+             (process-message! message)
+             (recur))
+           (log "CONTENT SCRIPT: leaving message loop")))
 
 ; -- a simple page analysis  ------------------------------------------------------------------------------------------------
 
@@ -51,13 +64,13 @@
   "on mouse over add border to the element"
   (let [target (. e -target)]
     (do
-     (when (:prev-element @state)
-       (return-prev-state))
-     (update-prev-el target)
-     (set! (.. target -style -border) "1px solid"))))
+      (when (:prev-element @state)
+        (return-prev-state))
+      (update-prev-el target)
+      (set! (.. target -style -border) "1px solid"))))
 
 (defn generate-selector []
-  (.addEventListener js/document "mouseover" handle-mouse-over))
+  (.addEventListener js/document "mouseover" (debounce handle-mouse-over 100)))
 
 ; -- main entry point -------------------------------------------------------------------------------------------------------
 
