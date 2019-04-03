@@ -60,10 +60,28 @@
         prev-element-border (:prev-element-border @state)]
     (set! (.. prev-element -style -border) prev-element-border)))
 
+(defn strip-html-tag [tags]
+  (if (and (> (count tags) 1) (= (first tags) "HTML"))
+    (rest tags)
+    tags))
+
+; TODO handle nth siblings
+; TODO do not change letter case for id
+(defn log-target-selector [target]
+  (let [result (loop [current-target target tags ()]
+                 (let [parent-node (.-parentNode current-target)
+                       id (.-id current-target)]
+                   (cond
+                     (not-empty id) (conj tags (str "#" id))
+                     (nil? parent-node) tags
+                     :else (recur parent-node (conj tags (.-tagName current-target))))))]
+    (log (clojure.string/lower-case (clojure.string/join " > " (strip-html-tag result))))))
+
 (defn handle-mouse-over [e]
   "on mouse over add border to the element"
   (let [target (. e -target)]
     (do
+      (log-target-selector target)
       (when (:prev-element @state)
         (return-prev-state))
       (update-prev-el target)
