@@ -61,38 +61,59 @@
     (set! (.. prev-element -style -border) prev-element-border)))
 
 (defn strip-html-tag [tags]
-  (if (and (> (count tags) 1) (= (first tags) "HTML"))
+  (if (and (> (count tags) 1) (= (clojure.string/lower-case (first tags)) "html"))
     (rest tags)
     tags))
 
-; TODO handle nth siblings
-; TODO do not change letter case for id
-(defn log-target-selector [target]
-  (let [result (loop [current-target target tags ()]
-                 (let [parent-node (.-parentNode current-target)
-                       id (.-id current-target)]
+(extend-type js/NodeList
+  ISeqable
+  (-seq [array] (array-seq array 0)))
+
+(defn count-siblings [el]
+  (let [parent-node (.-parentNode el)]
+    (if (nil? parent-node)
+      0
+      (count (array-seq (.-children parent-node))))))
+
+(defn count-nth-child [el]
+  (let [nth-counter (loop [prev-sibling (.-previousSibling el) counter 1]
+                      (cond
+                        (nil? prev-sibling) counter
+                        :else (recur (.-previousSibling prev-sibling)
+                                     (if (= 1 (.-nodeType prev-sibling))
+                                       (inc counter)
+                                       counter))))
+        children (count-siblings el)]
+    (if (> children 1)
+      (str (.-tagName el) ":nth-child(" nth-counter ")")
+      (.-tagName el))))
+
+(defn get-selector [node]
+  (let [result (loop [current-node node acc ()]
+                 (let [parent-node (.-parentNode current-node)
+                       id (.-id current-node)]
                    (cond
-                     (not-empty id) (conj tags (str "#" id))
-                     (nil? parent-node) tags
-                     :else (recur parent-node (conj tags (.-tagName current-target))))))]
-    (log (clojure.string/lower-case (clojure.string/join " > " (strip-html-tag result))))))
+                     (not-empty id) (conj acc (str "#" id))
+                     (nil? parent-node) acc
+                     :else (recur parent-node (conj acc (clojure.string/lower-case (count-nth-child current-node)))))))]
+    (clojure.string/join " > " (strip-html-tag result))))
 
 (defn handle-mouse-over [e]
   "on mouse over add border to the element"
-  (let [target (. e -target)]
+  (let [target (.-target e)]
     (do
-      (log-target-selector target)
+      (log (get-selector target))
       (when (:prev-element @state)
         (return-prev-state))
       (update-prev-el target)
       (set! (.. target -style -border) "1px solid"))))
 
-(defn generate-selector []
+(defn init-assistant []
   (.addEventListener js/document "mouseover" (debounce handle-mouse-over 100)))
 
 ; -- main entry point -------------------------------------------------------------------------------------------------------
 
 (defn init! []
   (log "CONTENT SCRIPT: init")
-  (generate-selector)
+  (init-assistant)
   (connect-to-background-page!))
